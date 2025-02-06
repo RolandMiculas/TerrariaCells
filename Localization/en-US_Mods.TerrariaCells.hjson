@@ -60,6 +60,7 @@ Configs: {
 		Headers: {
 			BuilderSettings: Builder Settings
 			InventorySettings: Inventory Settings
+			GameplaySettings: Gameplay Settings Header
 		}
 
 		EnableInventoryChanges: {
@@ -89,6 +90,11 @@ Configs: {
 
 		DisableUsingMouseItem: {
 			Label: Disable Using Mouse Item
+			Tooltip: ""
+		}
+
+		EnableCustomWorldGen: {
+			Label: Enable Custom World Gen
 			Tooltip: ""
 		}
 	}
