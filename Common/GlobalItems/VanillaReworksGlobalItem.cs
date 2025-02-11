@@ -107,6 +107,13 @@ namespace TerrariaCells.Common.GlobalItems
                     item.knockBack = 0f;
                     item.shootSpeed = 50;
                     break;
+                case ItemID.RubyStaff:
+                    item.damage = 15;
+                    item.mana = 9;
+                    item.useTime = 23;
+                    item.knockBack = 0f;
+                    item.shootSpeed = 50;
+                    break;
                 case ItemID.InfernoFork:
                     item.damage = 15;
                     item.mana = 80;
@@ -137,13 +144,6 @@ namespace TerrariaCells.Common.GlobalItems
                     item.useTime = 20;
                     item.knockBack = 0f;
                     item.shootSpeed = 12;
-                    break;
-                case ItemID.RubyStaff:
-                    item.damage = 15;
-                    item.mana = 5;
-                    item.useTime = 18;
-                    item.knockBack = 0f;
-                    item.shootSpeed = 50;
                     break;
                 // SUMMON
                 // Staffs

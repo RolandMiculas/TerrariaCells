@@ -121,6 +121,12 @@ namespace TerrariaCells.Common.GlobalProjectiles
                 case ProjectileID.Ale:
                     target.AddBuff(BuffID.Oiled, 60 * 8);
                     break;
+                case ProjectileID.RubyBolt:
+                    target.AddBuff(BuffID.OnFire, 60 * 8);
+                    break;
+                case ProjectileID.EmeraldBolt:
+                    target.AddBuff(BuffID.Poisoned, 60 * 8);
+                    break;
             }
         }
         public override void OnSpawn(Projectile projectile, IEntitySource source)
