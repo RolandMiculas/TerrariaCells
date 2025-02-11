@@ -138,6 +138,13 @@ namespace TerrariaCells.Common.GlobalItems
                     item.knockBack = 0f;
                     item.shootSpeed = 12;
                     break;
+                case ItemID.RubyStaff:
+                    item.damage = 15;
+                    item.mana = 5;
+                    item.useTime = 18;
+                    item.knockBack = 0f;
+                    item.shootSpeed = 50;
+                    break;
                 // SUMMON
                 // Staffs
                 case ItemID.ClingerStaff:
