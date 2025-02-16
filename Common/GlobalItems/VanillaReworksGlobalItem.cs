@@ -4,9 +4,10 @@ using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
 using TerrariaCells.Content.WeaponAnimations;
+using TerrariaCells.Content.Projectiles;
 
 namespace TerrariaCells.Common.GlobalItems
-{
+{ 
     public class VanillaReworksGlobalItem : GlobalItem
     {
         public override void SetDefaults(Item item)
@@ -109,10 +110,11 @@ namespace TerrariaCells.Common.GlobalItems
                     break;
                 case ItemID.RubyStaff:
                     item.damage = 15;
-                    item.mana = 9;
-                    item.useTime = 23;
+                    item.mana = 5;
+                    item.useTime = 18;
                     item.knockBack = 0f;
                     item.shootSpeed = 50;
+                    item.shoot = ModContent.ProjectileType<ExampleRubyStaff>();
                     break;
                 case ItemID.InfernoFork:
                     item.damage = 15;

@@ -121,11 +121,8 @@ namespace TerrariaCells.Common.GlobalProjectiles
                 case ProjectileID.Ale:
                     target.AddBuff(BuffID.Oiled, 60 * 8);
                     break;
-                case ProjectileID.RubyBolt:
-                    target.AddBuff(BuffID.OnFire, 60 * 8);
-                    break;
                 case ProjectileID.EmeraldBolt:
-                    target.AddBuff(BuffID.Poisoned, 60 * 8);
+                    target.AddBuff(BuffID.Poisoned, 60 * 4);
                     break;
             }
         }

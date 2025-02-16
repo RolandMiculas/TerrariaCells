@@ -141,6 +141,7 @@ Projectiles: {
 	TelegraphWarning.DisplayName: Telegraph Warning
 	TendrilAttack.DisplayName: Tendril Attack
 	SwordStabWave.DisplayName: Sword Stab Wave
+	ExampleRubyStaff.DisplayName: Example Ruby Staff
 }
 
 Tooltips: {
