@@ -11,6 +11,12 @@ namespace TerrariaCells.Common.GlobalItems
     {
         public override void SetDefaults(Item item)
         {
+            //make swords that are juuust too fast for the animation to look right. slowed down a given a bit of damage
+            if (item.useStyle == ItemUseStyleID.Swing && !item.noMelee && item.DamageType == DamageClass.Melee && item.useTime == 15)
+            {
+                item.useTime += 5;
+                item.damage = (int)(item.damage * 1.05f);
+            }
             // CHANGE DEFAULT ITEM STATS HERE
             switch (item.type)
             {
@@ -19,7 +25,6 @@ namespace TerrariaCells.Common.GlobalItems
                 case ItemID.PhoenixBlaster:
                     item.damage = 20;
                     item.useTime = 14;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 case ItemID.Minishark:
@@ -31,7 +36,6 @@ namespace TerrariaCells.Common.GlobalItems
                 case ItemID.SniperRifle:
                     item.damage = 60;
                     item.useTime = 25;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 case ItemID.OnyxBlaster:
@@ -44,26 +48,25 @@ namespace TerrariaCells.Common.GlobalItems
                 case ItemID.PulseBow:
                     item.damage = 15;
                     item.useTime = 23;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 case ItemID.IceBow:
                     item.damage = 15;
                     item.useTime = 16;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
+				case ItemID.PlatinumBow:
+					item.damage = 22;
+					break;
                 // Launchers
                 case ItemID.Toxikarp:
                     item.damage = 2;
                     item.useTime = 12;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 case ItemID.RocketLauncher:
                     item.damage = 10;
                     item.useTime = 30;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 case ItemID.StarCannon:
@@ -71,19 +74,16 @@ namespace TerrariaCells.Common.GlobalItems
                     item.useTime = 10;
                     item.useAnimation = 30;
                     item.reuseDelay = 15;
-                    item.knockBack = 0f;
                     item.value = 1000;
 					return;
                 case ItemID.GrenadeLauncher:
                     item.damage = 80;
                     item.useTime = 70;
-                    item.knockBack = 0f;
                     item.value = 1000;
                     break;
                 // Other
                 case ItemID.AleThrowingGlove:
                     item.damage = 20;
-                    item.knockBack = 0f;
                     item.value = 1000;
 					break;
 
@@ -99,6 +99,10 @@ namespace TerrariaCells.Common.GlobalItems
                     item.useTime = 20;
                     item.value = 1000;
                     break;
+				case ItemID.PlatinumBroadsword:
+					item.damage = 20;
+					break;
+
                 // MAGE
                 case ItemID.EmeraldStaff:
                     item.damage = 15;
@@ -138,16 +142,17 @@ namespace TerrariaCells.Common.GlobalItems
                     item.knockBack = 0f;
                     item.shootSpeed = 12;
                     break;
+
                 // SUMMON
                 // Staffs
                 case ItemID.ClingerStaff:
                     item.knockBack = 0f;
                     break;
-
-				default:
-					return;
             }
+            
 			item.useAnimation = item.useTime;
+			if (item.DamageType.CountsAsClass(DamageClass.Ranged))
+				item.knockBack = 0;
         }
 
         public override void ModifyHitNPC(Item item, Player player, NPC target, ref NPC.HitModifiers modifiers)
@@ -184,9 +189,14 @@ namespace TerrariaCells.Common.GlobalItems
                 // CHANGE VANILLA TOOLTIPS HERE
                 switch (tooltip.Name)
                 {
-                    case "Material": // Remove the Material tag in the item tooltip
-                        tooltip.Hide();
+					//Tooltips to be hidden
+                    case "Material":
+					case "EtherianManaWarning":
+					case "OneDropLogo":
+					case "JourneyResearch":
+						tooltip.Hide();
                         break;
+
                     case "Knockback":
                         float knockback = player.GetWeaponKnockback(item, item.knockBack);
 
@@ -195,8 +205,8 @@ namespace TerrariaCells.Common.GlobalItems
 
                         tooltip.Text += " (" + knockback + "%)";
                         break;
-                    case "Speed":
 
+                    case "Speed":
                         int tempStat = (int)(item.useAnimation * (1 / player.GetWeaponAttackSpeed(item)));
 
                         if (tempStat <= 8)
@@ -219,16 +229,7 @@ namespace TerrariaCells.Common.GlobalItems
                         float attacksPerSecond = MathF.Round(60 / (float)tempStat, 2);
                         tooltip.Text += Mod.GetLocalization("Tooltips.AttacksPerSecond").Format(attacksPerSecond);
                         break;
-                    case "UseMana":
-                        tooltip.Hide();
-                        break;
-                    case "EtherianManaWarning":
-                        tooltip.Hide();
-                        break;
-                    case "OneDropLogo":
-                        tooltip.Hide();
-                        break;
-                        /*
+						/*
                     case "Favorite":
                         tooltip.Hide();
                         break;
@@ -236,7 +237,7 @@ namespace TerrariaCells.Common.GlobalItems
                         tooltip.Hide();
                         break;
                         */
-                }
+				}
 
             }
 

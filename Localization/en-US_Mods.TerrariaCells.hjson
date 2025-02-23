@@ -60,6 +60,7 @@ Configs: {
 		Headers: {
 			BuilderSettings: Builder Settings
 			InventorySettings: Inventory Settings
+			DebugAndPlaytesting: Debug And Playtesting Header
 		}
 
 		EnableInventoryChanges: {
@@ -91,6 +92,16 @@ Configs: {
 			Label: Disable Using Mouse Item
 			Tooltip: ""
 		}
+
+		DisableSpawns: {
+			Label: Disable Spawns
+			Tooltip: ""
+		}
+
+		PlaytesterShops: {
+			Label: Playtester Shops
+			Tooltip: ""
+		}
 	}
 }
 
@@ -112,6 +123,21 @@ Items: {
 
 	ClickableCrystalItem: {
 		DisplayName: Clickable Crystal Item
+		Tooltip: ""
+	}
+
+	PhantomPhoenix: {
+		DisplayName: Phantom Phoenix
+		Tooltip: ""
+	}
+
+	CrimsonPylon: {
+		DisplayName: Crimson Pylon
+		Tooltip: ""
+	}
+
+	HivePylon: {
+		DisplayName: Hive Pylon
 		Tooltip: ""
 	}
 }
@@ -141,6 +167,7 @@ Projectiles: {
 	TelegraphWarning.DisplayName: Telegraph Warning
 	TendrilAttack.DisplayName: Tendril Attack
 	SwordStabWave.DisplayName: Sword Stab Wave
+	BloodThorn.DisplayName: Blood Thorn
 }
 
 Tooltips: {
@@ -176,4 +203,9 @@ Buffs: {
 		DisplayName: Frozen Enemy Debuff
 		Description: Mods.TerrariaCells.Buffs.FrozenEnemyDebuff.Description
 	}
+}
+
+Tiles: {
+	CrimsonPylon.MapEntry: Crimson Pylon
+	HivePylon.MapEntry: Hive Pylon
 }

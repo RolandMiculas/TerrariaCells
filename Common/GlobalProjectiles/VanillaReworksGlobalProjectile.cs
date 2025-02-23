@@ -19,8 +19,23 @@ namespace TerrariaCells.Common.GlobalProjectiles
         private static int[] undeadNPCs = { NPCID.Zombie, NPCID.Skeleton };
         private static int[] bossNPCs = { NPCID.EyeofCthulhu };
         private static float stakeToUndeadDamageModifier = 1.5f;
+        public bool ForceCrit = false;
+        public override bool InstancePerEntity => true;
+        public override void SetDefaults(Projectile projectile)
+		{
+			switch (projectile.type)
+			{
+				case ProjectileID.PurpleLaser:
+				case ProjectileID.BulletHighVelocity:
+					projectile.penetrate = 1;
+					break;
+				case ProjectileID.PulseBolt:
+					projectile.penetrate = 3;
+					break;
+			}
+		}
 
-        public override bool OnTileCollide(Projectile projectile, Vector2 oldVelocity)
+		public override bool OnTileCollide(Projectile projectile, Vector2 oldVelocity)
         {
             if (projectile.type == ProjectileID.PulseBolt)
             {
@@ -36,7 +51,7 @@ namespace TerrariaCells.Common.GlobalProjectiles
                     int targetID = projectile.FindTargetWithLineOfSight();
                     if (targetID >= 0)
                     {
-                        Vector2 newVel = projectile.DirectionTo(Main.npc[targetID].position);
+                        Vector2 newVel = projectile.DirectionTo(Main.npc[targetID].Center);
                         newVel.Normalize();
                         newVel *= projectile.oldVelocity.Length();
 
@@ -96,7 +111,24 @@ namespace TerrariaCells.Common.GlobalProjectiles
                     break;
             }
 
+			if (projectile.TryGetGlobalProjectile(out SourceGlobalProjectile gProj) && gProj.itemSource != null)
+			{
+				Item source = gProj.itemSource;
+				if (source.type == ItemID.SniperRifle && target.boss)
+					ForceCrit = true;
+				else if (source.type == ItemID.PhoenixBlaster && source.TryGetGlobalItem(out Content.WeaponAnimations.Gun gun))
+				{
+					if (gun.Ammo < 5)
+						ForceCrit = true;
+				}
+			}
+
+            if (ForceCrit)
+            {
+                modifiers.SetCrit();
+            }
         }
+
         public override void OnHitNPC(Projectile projectile, NPC target, NPC.HitInfo hit, int damageDone)
         {
             switch (projectile.type)
@@ -123,6 +155,7 @@ namespace TerrariaCells.Common.GlobalProjectiles
                     break;
             }
         }
+
         public override void OnSpawn(Projectile projectile, IEntitySource source)
         {
             if (projectile.type == ProjectileID.Volcano && projectile.ai[1] != 1)
@@ -133,10 +166,18 @@ namespace TerrariaCells.Common.GlobalProjectiles
             {
                 projectile.Kill();
             }
+
+			//Disable gravestones (starting to get unsightly)
+			if (ProjectileID.Sets.IsAGravestone[projectile.type])
+			{
+				projectile.Kill();
+			}
         }
-        public override void AI(Projectile projectile)
+
+        /*public override void AI(Projectile projectile)
         {
-            if (projectile.type == ProjectileID.Starfury)
+			//Literally wasn't doing anything ?
+			/*if (projectile.type == ProjectileID.Starfury)
             {
                 int targetID = projectile.FindTargetWithLineOfSight();
                 if (targetID >= 0)
@@ -144,7 +185,18 @@ namespace TerrariaCells.Common.GlobalProjectiles
                     Vector2 directionToTarget = projectile.DirectionTo(Main.npc[targetID].position);
 
                 }
-            }
-        }
-    }
+            }//
+		}*/
+
+		public override bool PreAI(Projectile projectile)
+		{
+			if (projectile.type == ProjectileID.DesertDjinnCurse)
+			{
+				projectile.velocity = Vector2.Zero;
+				Lighting.AddLight(projectile.Center, Color.White.ToVector3() * 0.5f);
+				return false;
+			}
+			return base.PreAI(projectile);
+		}
+	}
 }

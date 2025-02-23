@@ -23,6 +23,10 @@ namespace TerrariaCells.Common.Configs
 		[DefaultValue(false)]
 		public bool BuilderMode;
 
+		/// <summary>Toggle NPC spawns (added to allow builders to build in peace)</summary>
+		[DefaultValue(false)]
+		public bool DisableSpawns;
+
 		[DefaultValue(true)]
 		public bool DisableUsingMouseItem;
 
@@ -58,5 +62,10 @@ namespace TerrariaCells.Common.Configs
 		/// </summary>
 		[DefaultValue(true)]
 		public bool HideVanillaInventory;
+
+		[Header("DebugAndPlaytesting")]
+
+		[DefaultValue(true)]
+		public bool PlaytesterShops;
 	}
 }

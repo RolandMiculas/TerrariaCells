@@ -18,6 +18,15 @@ namespace TerrariaCells.Content.WeaponAnimations
     {
         public static int[] launcher = { ItemID.RocketLauncher, ItemID.StarCannon, ItemID.GrenadeLauncher };
         public override bool InstancePerEntity => true;
+        public override void SetStaticDefaults()
+        {
+            for (int i = 0; i < launcher.Length; i++)
+            {
+                ItemID.Sets.ItemsThatAllowRepeatedRightClick[launcher[i]] = true;
+            }
+
+            base.SetStaticDefaults();
+        }
         public override bool AppliesToEntity(Item entity, bool lateInstantiation)
         {
             return launcher.Contains(entity.type);
@@ -113,6 +122,7 @@ namespace TerrariaCells.Content.WeaponAnimations
                 //fixed item rotation and back hand rotation
                 player.itemRotation = MathHelper.ToRadians(-30 * player.direction);
                 player.SetCompositeArmBack(true, Player.CompositeArmStretchAmount.Full, MathHelper.ToRadians(-80 * player.direction));
+                if (ReloadStep == SkipStep) ReloadStep++;
                 //front hand movement (go to pocket then back up to gun)
                 if (ReloadStep == 0)
                 {
@@ -142,8 +152,8 @@ namespace TerrariaCells.Content.WeaponAnimations
                 }
                 else
                 {
-                    player.itemLocation += TCellsUtils.LerpVector2(new Vector2(-10 * player.direction, 15), Vector2.Zero, animationTime, player.itemAnimationMax, TCellsUtils.LerpEasing.InOutCubic);
-                    player.itemRotation = TCellsUtils.LerpFloat(MathHelper.ToRadians(-30) * player.direction, 0, animationTime, player.itemAnimationMax, TCellsUtils.LerpEasing.InOutCubic);
+                    player.itemLocation += TCellsUtils.LerpVector2(new Vector2(-10 * player.direction, 15), Vector2.Zero, player.itemTimeMax - player.itemTime, player.itemTimeMax, TCellsUtils.LerpEasing.InOutCubic);
+                    player.itemRotation = TCellsUtils.LerpFloat(MathHelper.ToRadians(-30) * player.direction, 0, player.itemTimeMax - player.itemTime, player.itemTimeMax, TCellsUtils.LerpEasing.InOutCubic);
                     player.SetCompositeArmFront(true, Player.CompositeArmStretchAmount.Full, player.itemRotation - MathHelper.PiOver2 * player.direction);
                 }
                 //play reload sound and increase ammo at end of animation
@@ -174,7 +184,7 @@ namespace TerrariaCells.Content.WeaponAnimations
             //only shoot if not reloading
             if (Ammo > 0 && !player.GetModPlayer<WeaponPlayer>().reloading)
             {       
-                return base.Shoot(item, player, source, position, velocity, type, damage, knockback);
+                return true;
             }
             return false;
         }

@@ -14,32 +14,32 @@ namespace TerrariaCells.Common.ModPlayers
 {
 	public class AccessoryPlayer : ModPlayer
 	{
-		public bool fastClock;
-		private int fastClockTimer = 0;
-		public bool bandOfRegen;
+		public bool fastClock; //+30% speed on killing an enemy
+		private int fastClockTimer;
+		public bool bandOfRegen; //+1% health on killing an enemy
+		private bool frozenShield; //Saved from lethal damage once (consumed on use)
 		public Item? frozenShieldItem;
-		private bool frozenShield;
-		public bool thePlan;
-		public bool nazar;
-		public bool sharktooth;
-		public bool bersGlove;
+		public bool thePlan; //+50% damage vs enemies with >90% hp
+		public bool nazar; //+20 mana on melee hit
+		public bool sharktooth; //Inflict bleed on hit
+		public bool bersGlove; //+4% damage for "consecutive" melee hits
 		private int bersTimer;
 		private int bersCounter;
-		public bool reconScope;
-		public bool fuseKitten;
-		public bool chlorophyteCoating;
+		public bool reconScope; //+30% damage when no enemies nearby
+		public bool fuseKitten; //Extra rocket explosion damage/radius
+		public bool chlorophyteCoating; //Bullets and arrows become chlorophyte
+		public bool stalkerQuiver; //Summons a spectral arrow to hit targets hit by your arrows (deals 50% original damage)
+		private int stalkerQuiverTimer;
 
-		public bool stalkerQuiver;
 		public override void Load()
 		{
 			IL_Player.OnHurt_Part2 += IL_Player_OnHurt_Part2;
-			IL_Player.ApplyEquipFunctional += IL_Player_ApplyEquipFunctional;
-
+			//IL_Player.ApplyEquipFunctional += IL_Player_ApplyEquipFunctional;
 		}
 		public override void Unload()
 		{
 			IL_Player.OnHurt_Part2 -= IL_Player_OnHurt_Part2;
-			IL_Player.ApplyEquipFunctional -= IL_Player_ApplyEquipFunctional;
+			//IL_Player.ApplyEquipFunctional -= IL_Player_ApplyEquipFunctional;
 		}
 		private void IL_Player_OnHurt_Part2(ILContext context)
 		{
@@ -47,6 +47,10 @@ namespace TerrariaCells.Common.ModPlayers
 			try
 			{
 				ILCursor cursor = new ILCursor(context);
+
+				//===== NOTE =====
+				//Magic Cuffs needs to either be IL or Detour (no orig), due to them restoring mana on hit in vanilla
+				//================
 
 				ILLabel? IL_0176 = null; //IL instruction 0176 (by ilSpy)
 				if (!cursor.TryGotoNext(
@@ -84,6 +88,7 @@ namespace TerrariaCells.Common.ModPlayers
 				MonoModHooks.DumpIL(ModContent.GetInstance<TerrariaCells>(), context);
 			}
 		}
+		//[Unused]
 		private void IL_Player_ApplyEquipFunctional(ILContext context)
 		{
 			log4net.ILog GetInstanceLogger() => ModContent.GetInstance<TerrariaCells>().Logger;
@@ -244,7 +249,10 @@ namespace TerrariaCells.Common.ModPlayers
 			reconScope = false;
 			fuseKitten = false;
 			chlorophyteCoating = false;
-
+			if (!stalkerQuiver)
+				stalkerQuiverTimer = 0;
+			else if (stalkerQuiverTimer > 0)
+				stalkerQuiverTimer--;
 			stalkerQuiver = false;
 		}
 		public override void ModifyShootStats(Item item, ref Vector2 position, ref Vector2 velocity, ref int type, ref int damage, ref float knockback)
@@ -261,10 +269,10 @@ namespace TerrariaCells.Common.ModPlayers
 		{
 			if (frozenShieldItem != null)
 			{
-				Player.statLife = 1;
+				Player.statLife = (int)(Player.statLifeMax2 * 0.15f);
 				playSound = false;
 				genDust = false;
-				Player.immuneTime = 4 * 60; //4 sec
+				Player.immuneTime = 5 * 60; //4 sec
 				frozenShield = true;
 				int itemIndex = -1;
 				foreach (Item item in Player.armor[13..19])
@@ -296,23 +304,31 @@ namespace TerrariaCells.Common.ModPlayers
 				fastClockTimer--;
 				Player.moveSpeed += 0.3f;
 			}
-			bool anyNearbyEnemies = false;
-			for (int i = 0; i < Main.maxNPCs; i++)
+		}
+		public override void UpdateEquips()
+		{
+			if (reconScope)
 			{
-				if (!Main.npc[i].active) continue;
-				NPC npc = Main.npc[i];
-				if (MathF.Abs(npc.position.X - Player.position.X) + MathF.Abs(npc.position.X - Player.position.X) < 6 * 16)
+				bool anyNearbyEnemies = false;
+				for (int i = 0; i < Main.maxNPCs; i++)
 				{
-					anyNearbyEnemies = true;
-					break;
+					NPC npc = Main.npc[i];
+					if (!npc.active) continue;
+					if (MathF.Abs(npc.position.X - Player.position.X) + MathF.Abs(npc.position.Y - Player.position.Y) < 6 * 16)
+					{
+						anyNearbyEnemies = true;
+						break;
+					}
+				}
+				if (!anyNearbyEnemies)
+				{
+					Player.GetDamage(DamageClass.Generic) += 0.3f;
 				}
 			}
-			if (!anyNearbyEnemies)
-				Player.GetDamage(DamageClass.Generic) += 0.3f;
 		}
 		public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
 		{
-			if (thePlan && modifiers.DamageType.CountsAsClass(DamageClass.Melee))
+			if (thePlan)
 			{
 				if (target.life > (int)(target.lifeMax * 0.9f)) modifiers.SourceDamage += 0.5f;
 			}
@@ -325,17 +341,18 @@ namespace TerrariaCells.Common.ModPlayers
 		{
 			if (stalkerQuiver)
 			{
-				if (proj.arrow && proj.type != ProjectileID.PhantasmArrow)
+				if (proj.arrow && proj.type != ProjectileID.PhantasmArrow && stalkerQuiverTimer == 0)
 				{
 					Vector2 pos = target.Center + (Vector2.UnitX.RotatedByRandom(MathHelper.TwoPi) * 320f);
 					Projectile newProj = Projectile.NewProjectileDirect(proj.GetSource_OnHit(target), pos, pos.DirectionTo(target.Center) * 4f, ProjectileID.PhantasmArrow, damageDone / 2, 0f, proj.owner, target.whoAmI);
 					//newProj.tileCollide = false;
+					stalkerQuiverTimer = 10; //6x per second should be plenty lenient
 				}
 			}
 		}
 		public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
 		{
-			if (target.life - damageDone < 1) OnKill(target, hit, damageDone);
+			if (target.life < 1) OnKill(target, hit, hit.Damage);
 			if (hit.DamageType.CountsAsClass(DamageClass.Melee))
 			{
 				if (nazar)
@@ -343,7 +360,11 @@ namespace TerrariaCells.Common.ModPlayers
 					Player.statMana += 20;
 					Player.ManaEffect(20);
 				}
-				if (sharktooth)	target.AddBuff(BuffID.Bleeding, 360); //Replace with modded debuff? 6 sec duration.
+				if (sharktooth)
+				{
+					//Still need Bleed
+					target.AddBuff(BuffID.Bleeding, 360); //Replace with modded debuff? 6 sec duration.
+				}
 				if (bersGlove)
 				{
 					bersCounter++;
@@ -356,7 +377,10 @@ namespace TerrariaCells.Common.ModPlayers
 
 		private void OnKill(NPC npc, NPC.HitInfo hit, int damage)
 		{
-			if(fastClock) fastClockTimer = 5 * 60;
+			if (npc.lifeMax <= 5 || npc.friendly)// || !npc.CanBeChasedBy() || NPCID.Sets.ProjectileNPC[npc.type])
+				return;
+
+			if (fastClock) fastClockTimer = 5 * 60;
 			if (bandOfRegen) Player.Heal((int)(Player.statLifeMax2 * 0.01f));
 		}
 	}

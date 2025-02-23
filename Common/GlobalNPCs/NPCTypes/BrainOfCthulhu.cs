@@ -10,16 +10,86 @@ using static TerrariaCells.Common.Utilities.NPCHelpers;
 using Microsoft.Xna.Framework.Graphics;
 using System.Collections;
 using System.Reflection;
+using Terraria.DataStructures;
+using MonoMod.Cil;
+using Mono.Cecil.Cil;
 
 namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 {
 	public class BrainOfCthulhu : AIType
 	{
+		public override void Load()
+		{
+			Terraria.GameContent.UI.BigProgressBar.IL_BrainOfCthuluBigProgressBar.ValidateAndCollectNecessaryInfo += BoCHealthBarInfo;
+		}
+		public override void Unload()
+		{
+			Terraria.GameContent.UI.BigProgressBar.IL_BrainOfCthuluBigProgressBar.ValidateAndCollectNecessaryInfo -= BoCHealthBarInfo;
+		}
+		private void BoCHealthBarInfo(ILContext context)
+		{
+			void Error(string message)
+			{
+				ModContent.GetInstance<TerrariaCells>().Logger.Error(message);
+			}
+			try
+			{
+				ILCursor cursor = new ILCursor(context);
+
+				if (!cursor.TryGotoNext(MoveType.Before,
+					//i => i.MatchCall(typeof(NPC).GetMethod("GetBrainOfCthulhuCreepersCount", BindingFlags.Public | BindingFlags.Static)),
+					i => i.Match(OpCodes.Call),
+					i => i.MatchStloc1(),
+					i => i.MatchLdarg0()))
+				{
+					Error($"Couldn't match IL Patch: {context.Method.Name} @ {cursor.Index}");
+					MonoModHooks.DumpIL(ModContent.GetInstance<TerrariaCells>(), context);
+					return;
+				}
+				ILLabel jumpBackPoint = cursor.MarkLabel();
+
+				if (!cursor.TryGotoNext(MoveType.Before,
+					i => i.MatchLdloc(4),
+					i => i.MatchLdloc(5),
+					i => i.MatchConvR4(),
+					i => i.Match(OpCodes.Call)))
+					//i => i.MatchCall<Terraria.GameContent.UI.BigProgressBar.BigProgressBarCache>("SetLife")))
+				{
+					Error($"Couldn't match IL Patch: {context.Method.Name} @ {cursor.Index}");
+					return;
+				}
+				ILLabel ret = cursor.MarkLabel();
+
+				//cursor.EmitLdloc0();
+				//cursor.EmitDelegate((NPC npc) => (float)npc.life);
+				//cursor.EmitLdloc0();
+				//cursor.EmitDelegate((NPC npc) => npc.lifeMax);
+
+				cursor.EmitLdloc0();
+				cursor.EmitLdfld(typeof(NPC).GetField("life", BindingFlags.Public | BindingFlags.Instance));
+				cursor.EmitConvR4();
+				cursor.EmitStloc(4);
+				cursor.EmitLdloc0();
+				cursor.EmitLdfld(typeof(NPC).GetField("lifeMax", BindingFlags.Public | BindingFlags.Instance));
+				cursor.EmitStloc(5);
+
+				cursor.GotoLabel(jumpBackPoint, MoveType.Before);
+				cursor.EmitBr(ret);
+			}
+			catch (Exception x)
+			{
+				Error(x.Message);
+			}
+		}
+
+
 		public override bool AppliesToNPC(int npcType)
 		{
 			return npcType == NPCID.BrainofCthulhu;
 		}
 
+		//This is probably not ideal NPC behaviour code
+		//Probably don't emulate this
 		public override void Behaviour(NPC npc)
 		{
 			int timer = npc.Timer();
@@ -152,7 +222,7 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 							Main.myPlayer,
 							centre.X,
 							centre.Y,
-							i == index ? TelegraphWarning.Yellow : TelegraphWarning.Red
+							i == index ? TelegraphWarning.Yellow : TelegraphWarning.Orange
 						);
 						proj.localAI[0] = 0.333f;
 						proj.timeLeft = Duration;
@@ -163,7 +233,7 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 			void Cross()
 			{
 				const int Start = 175;
-				const int End = 215;
+				const int End = 245;
 				const int Duration = End - Start;
 
 				if (timer < Start) return;
@@ -219,28 +289,20 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 				if (Main.netMode == NetmodeID.MultiplayerClient) return;
 
 				Vector2 vel = Vector2.Zero;
-				if (LeftTentacles.Contains(timer - Start)) vel.X = 4;
-				if (RightTentacles.Contains(timer - Start)) vel.X = -4;
+				if (LeftTentacles.Contains(timer)) vel.X = 4;
+				if (RightTentacles.Contains(timer)) vel.X = -4;
 				if (vel.X != 0)
 				{
 					Vector2 position = centre + new Vector2(44 * 16 * -MathF.Sign(vel.X), (36.5f * 16) - (Main.rand.Next(PlatformHeights) * 16));
-					Projectile proj = Projectile.NewProjectileDirect(
+					TelegraphWarning.CreateWarning(
 						npc.GetSource_FromAI(),
 						position,
-						Vector2.Zero,
-						ModContent.ProjectileType<TelegraphWarning>(),
-						0,
-						0,
-						Main.myPlayer,
-						(position + (vel * 16 * 6)).X,
-						(position + (vel * 16 * 6)).Y,
-						TelegraphWarning.Yellow
-					);
-					proj.localAI[0] = 0.25f;
-					proj.timeLeft = 25;
-					proj.netUpdate = true;
+						(position + (vel * 16 * 6)),
+						25,
+						TelegraphWarning.Orange,
+						0.25f);
 
-					proj = Projectile.NewProjectileDirect(
+					Projectile proj = Projectile.NewProjectileDirect(
 						npc.GetSource_FromAI(),
 						position,
 						Vector2.Zero,
@@ -249,13 +311,14 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 						1f,
 						Main.myPlayer,
 						position.X,
-						centre.X,
+						centre.X - (vel.X * 6 * 4),
 						40
 						);
 					proj.timeLeft = 65;
 					proj.netUpdate = true;
 				}
 			}
+			//Unused
 			void WarnMoveRandom()
 			{
 				const int Start = 215;
@@ -267,7 +330,10 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 
 				if (timer == Start)
 				{
-					npc.ai[2] = Main.rand.NextFloat(MathHelper.TwoPi);
+					float rotation = MathHelper.PiOver4;
+					rotation += Main.rand.Next(4) * MathHelper.PiOver2;
+					rotation += MathHelper.ToRadians(Main.rand.Next(-20, 20));
+					npc.ai[2] = rotation;
 					Vector2 targetDirection = Vector2.UnitX.RotatedBy(npc.ai[2]);
 					Projectile proj = Projectile.NewProjectileDirect(
 							npc.GetSource_FromAI(),
@@ -287,8 +353,8 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 			}
 			void MoveRandom()
 			{
-				const int Start = 248;
-				const int End = 2000;
+				const int Start = 245;
+				const int End = 2673;
 				const int Duration = End - Start;
 
 				if (timer < Start) return;
@@ -297,12 +363,18 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 				if (timer == Start)
 				{
 					npc.Center = centre;
-					Vector2 targetDirection = Vector2.UnitX.RotatedBy(npc.ai[2]);
+					float rotation = MathHelper.PiOver4;
+					rotation += Main.rand.Next(4) * MathHelper.PiOver2;
+					rotation += MathHelper.ToRadians(Main.rand.Next(-20, 20));
+					Vector2 targetDirection = Vector2.UnitX.RotatedBy(rotation);
 					npc.velocity = targetDirection * 4;
 				}
 				if (timer == End)
 				{
 					npc.dontTakeDamage = false;
+					npc.collideX = false;
+					npc.collideY = false;
+					npc.oldVelocity = npc.velocity;
 				}
 
 				int opacityTime = 15;
@@ -312,40 +384,98 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 				globalNPC.allowContactDamage = false;
 
 				if (npc.Center.Y < centre.Y - (20 * 16) || npc.Center.Y > centre.Y + (8 * 16))
+				{
+					npc.oldVelocity.Y = npc.velocity.Y;
 					npc.velocity.Y = -npc.velocity.Y;
+					npc.collideY = true;
+				}
 				if (MathF.Abs(npc.Center.X - centre.X) > 40 * 16)
+				{
+					npc.oldVelocity.X = npc.velocity.X;
 					npc.velocity.X = -npc.velocity.X;
-
-				//Previous behaviour, I used NPC collision to bounce around, but..
-				//Slopes.... Fuck slopes dude. I ain't doing that. You'd have to offer some crazy shit for me to take that with this.
-				/*if (npc.collideY)
-				{
-					Vector2 collideVector = Collision.TileCollision(npc.oldPosition, npc.oldVelocity, npc.width, npc.height, true, true);
-					if (npc.velocity.Y > 0 && collideVector.Y > npc.velocity.Y * 1.1f)
-					{
-						npc.position = npc.oldPosition + npc.oldVelocity;
-						npc.velocity = npc.oldVelocity;
-					}
-					else
-					{
-						npc.position -= 2 * npc.oldVelocity;
-						npc.velocity.Y = -npc.oldVelocity.Y;
-					}
+					npc.collideX = true;
 				}
-				if (npc.Center.Y < centre.Y - 256 || npc.Center.Y > centre.Y + 256)
-				{
-					npc.position -= 2 * npc.oldVelocity;
-					npc.velocity.Y = -npc.oldVelocity.Y;
-				}
-				if (npc.collideX)
-				{
-					npc.position -= 2 * npc.velocity;
-					npc.velocity.X = -npc.oldVelocity.X;
-				}*/
 			}
-			void Fall()
+			//Unused
+			void FewCreepers()
 			{
-				const int Start = 2000;
+				const int Start = 230;
+				const int End = 1030;
+				const int Duration = End - Start;
+
+				if (timer < Start) return;
+				if (timer > End) return;
+
+				bool ceilingCollision = npc.collideY && npc.oldVelocity.Y < 0 && npc.velocity.Y > 0;
+				if (ceilingCollision)
+				{
+					npc.collideY = false;
+					npc.oldVelocity.Y = npc.velocity.Y;
+				}
+
+				//int timerMod = timer % 333;
+				const int CreeperSpawnTime = 90;
+				if (ceilingCollision && End - timer > CreeperSpawnTime)
+				{
+					Vector2 top = centre + new Vector2(0, -384);
+					Vector2 bot = centre + new Vector2(0, 384);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						new Vector2(npc.Center.X, top.Y),
+						new Vector2(npc.Center.X, bot.Y),
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						top,
+						bot,
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					npc.ai[2] = npc.Center.X;
+					npc.ai[3] = -60;
+				}
+				if (npc.ai[3] < CreeperSpawnTime)
+				{
+					npc.ai[3]++;
+					if (npc.ai[3] > 0 && (((int)npc.ai[3] % 15 == 0 && Main.rand.NextBool(3)) || (int)npc.ai[3] % 30 == 0))
+					{
+						int cycle = timer / 333;
+						int maxCycles = Duration / 333;
+						if ((int)npc.ai[3] % 15 == 0)
+						{
+							float xOffset = MathF.Sin((float)(cycle + 3) * MathHelper.Pi / (float)maxCycles) * 32;
+							Vector2 spawnPos = centre + new Vector2(xOffset, -352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(-6f, 8f);
+							creeper.netUpdate = true;
+						}
+						if ((int)npc.ai[3] % 30 == 0)
+						{
+							float xOffset = MathF.Sin((float)(cycle + 2) * MathHelper.TwoPi / (float)maxCycles) * 32;
+							Vector2 spawnPos = new Vector2(npc.ai[2] + xOffset, centre.Y - 352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(4f, 6f);
+							creeper.netUpdate = true;
+						}
+					}
+				}
+			}
+			//Unused
+			void ManyCreepers()
+			{
+				const int Start = 1030;
 				const int End = 2668;
 				const int Duration = End - Start;
 
@@ -353,25 +483,394 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 				if (timer > End) return;
 
 				if (timer == Start)
+					npc.ai[3] = 90;
+
+				bool ceilingCollision = npc.collideY && npc.oldVelocity.Y < 0 && npc.velocity.Y > 0;
+				if (ceilingCollision)
+				{
+					npc.collideY = false;
+					npc.oldVelocity.Y = npc.velocity.Y;
+				}
+
+				//int timerMod = timer % 333;
+				const int CreeperSpawnTime = 105;
+				if (ceilingCollision && End - timer > CreeperSpawnTime)
+				{
+					Vector2 top = centre + new Vector2(0, -384);
+					Vector2 bot = centre + new Vector2(0, 384);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						new Vector2(npc.Center.X, top.Y),
+						new Vector2(npc.Center.X, bot.Y),
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						top,
+						bot,
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					npc.ai[2] = npc.Center.X;
+					npc.ai[3] = -60;
+				}
+				if (npc.ai[3] < CreeperSpawnTime)
+				{
+					npc.ai[3]++;
+					if (npc.ai[3] > 0 && (((int)npc.ai[3] % 6 == 0 && Main.rand.NextBool()) || (int)npc.ai[3] % 12 == 0))
+					{
+						int cycle = timer / 333;
+						int maxCycles = Duration / 333;
+						if ((int)npc.ai[3] % 6 == 0)
+						{
+							float xOffset = MathF.Sin((float)(cycle + 3) * MathHelper.Pi / (float)maxCycles) * 32;
+							Vector2 spawnPos = centre + new Vector2(xOffset, -352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(-6f, 8f);
+							creeper.netUpdate = true;
+						}
+						if ((int)npc.ai[3] % 12 == 0)
+						{
+							float xOffset = MathF.Sin((float)(cycle + 2) * MathHelper.TwoPi / (float)maxCycles) * 32;
+							Vector2 spawnPos = new Vector2(npc.ai[2] + xOffset, centre.Y - 352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(4f, 6f);
+							creeper.netUpdate = true;
+						}
+					}
+				}
+			}
+			void DoCreepers()
+			{
+				const int Start = 230;
+				const int End = 2668;
+				const int Duration = End - Start;
+
+				if (timer < Start) return;
+				if (timer > End) return;
+
+				const int CreeperSpawnTime = 105;
+				if (timer == Start)
+					npc.ai[3] = CreeperSpawnTime;
+
+				bool ceilingCollision = npc.collideY && npc.oldVelocity.Y < 0 && npc.velocity.Y > 0;
+				if (ceilingCollision)
+				{
+					npc.collideY = false;
+					npc.oldVelocity.Y = npc.velocity.Y;
+				}
+
+				//int timerMod = timer % 333;
+				if (ceilingCollision && End - timer > CreeperSpawnTime)
+				{
+					Vector2 top = centre + new Vector2(0, -384);
+					Vector2 bot = centre + new Vector2(0, 384);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						new Vector2(npc.Center.X, top.Y),
+						new Vector2(npc.Center.X, bot.Y),
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						top,
+						bot,
+						60,
+						TelegraphWarning.Yellow,
+						0.2f
+					);
+					npc.ai[2] = npc.Center.X;
+					npc.ai[3] = -60;
+				}
+				int cycle = (timer-Start) / CreeperSpawnTime;
+				int maxCycles = Duration / CreeperSpawnTime;
+				if (npc.ai[3] < CreeperSpawnTime)
+				{
+					npc.ai[3]++;
+					int tDiffA = (int)MathHelper.Lerp(18, 6, (float)cycle / (float)maxCycles);
+					int tDiffB = (int)MathHelper.Lerp(24, 8, (float)cycle / (float)maxCycles);
+					if (npc.ai[3] > 0)
+					{
+						if ((int)npc.ai[3] % tDiffA == 0 && Main.rand.NextBool())
+						{
+							float xOffset = MathF.Sin((float)(cycle + 3) * MathHelper.Pi / (float)maxCycles) * 32;
+							Vector2 spawnPos = centre + new Vector2(xOffset, -352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(-6f, 8f);
+							creeper.netUpdate = true;
+						}
+						if ((int)npc.ai[3] % tDiffB == 0 && Main.rand.NextBool(3))
+						{
+							float xOffset = MathF.Sin((float)(cycle + 2) * MathHelper.TwoPi / (float)maxCycles) * 32;
+							Vector2 spawnPos = new Vector2(npc.ai[2] + xOffset, centre.Y - 352);
+							NPC creeper = NPC.NewNPCDirect(
+									npc.GetSource_FromAI(),
+									spawnPos,
+									NPCID.Creeper,
+									target: npc.target);
+							creeper.velocity = new Vector2(4f, 6f);
+							creeper.netUpdate = true;
+						}
+					}
+				}
+			}
+			//Unused
+			void BloodSpikesOld()
+			{
+				const int Start = 230;
+				const int End = 2668;
+				const int Duration = End - Start;
+
+				if (timer < Start) return;
+				if (timer > End) return;
+
+				if (Main.netMode != NetmodeID.Server)
+				{
+					Player player = Main.LocalPlayer;
+					if (MathF.Abs(player.velocity.X) < 1.8f)
+						npc.localAI[0]++;
+
+					if (npc.localAI[0] > 135)
+					{
+						Point worldPos = player.Bottom.ToTileCoordinates();
+						for (int i = 0; i < 16; i++)
+						{
+							if (WorldGen.SolidTile2(worldPos.X, worldPos.Y))
+								break;
+							worldPos.Y++;
+						}
+						IEntitySource npcSourceAI = npc.GetSource_FromAI();
+						Projectile.NewProjectileDirect(
+							npcSourceAI,
+							worldPos.ToWorldCoordinates(),
+							-Vector2.UnitY,
+							ModContent.ProjectileType<BloodThorn>(),
+							20,
+							0,
+							player.whoAmI).rotation = -MathHelper.PiOver2;
+						for (int i = 0; i < 7; i++)
+						{
+							if (i == 3) continue;
+							int offsetX = (i - 3) * 32;
+							Point spawnPos = worldPos + new Vector2(offsetX, 0).ToTileCoordinates();
+							for (int j = 0; j < 16; j++)
+							{
+								if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+									break;
+								spawnPos.Y++;
+							}
+							if (spawnPos.Y > worldPos.Y + 2) continue;
+							Projectile.NewProjectileDirect(
+								npcSourceAI,
+								spawnPos.ToWorldCoordinates(),
+								-Vector2.UnitY,
+								ModContent.ProjectileType<BloodThorn>(),
+								20,
+								0,
+								player.whoAmI,
+								ai2: 1).rotation = -MathHelper.PiOver2 + MathHelper.ToRadians(offsetX * 0.55f);
+						}
+						npc.localAI[0] = 0;
+					}
+				}
+			}
+			void BloodSpikes()
+			{
+				if (Main.netMode == NetmodeID.Server) return;
+
+				const int Start = 230;
+				const int End = 2240;
+				const int Duration = End - Start;
+
+				if (timer < Start) return;
+				if (timer > End) return;
+
+				Player player = Main.LocalPlayer;
+				if (MathF.Abs(player.velocity.X) < 1.8f)
+					npc.localAI[0]++;
+				else if(npc.localAI[0] > 0)
+					npc.localAI[0]-=2;
+
+				if (npc.localAI[0] > 240)
+				{
+					Point worldPos = player.Bottom.ToTileCoordinates();
+					for (int i = 0; i < 16; i++)
+					{
+						if (WorldGen.SolidTile2(worldPos.X, worldPos.Y))
+							break;
+						worldPos.Y++;
+					}
+					IEntitySource npcSourceAI = npc.GetSource_FromAI();
+					Projectile.NewProjectileDirect(
+						npcSourceAI,
+						worldPos.ToWorldCoordinates(),
+						-Vector2.UnitY,
+						ModContent.ProjectileType<BloodThorn>(),
+						20,
+						0,
+						player.whoAmI).rotation = -MathHelper.PiOver2;
+					const int SpikeCount = 5;
+					for (int i = 0; i < SpikeCount; i++)
+					{
+						if (i == (SpikeCount/2)) continue;
+						int offsetX = (i - (SpikeCount/2)) * 32;
+						Point spawnPos = worldPos + new Vector2(offsetX, 0).ToTileCoordinates();
+						for (int j = 0; j < 16; j++)
+						{
+							if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+								break;
+							spawnPos.Y++;
+						}
+						if (spawnPos.Y > worldPos.Y + 2) continue;
+						Projectile.NewProjectileDirect(
+							npcSourceAI,
+							spawnPos.ToWorldCoordinates(),
+							-Vector2.UnitY,
+							ModContent.ProjectileType<BloodThorn>(),
+							20,
+							0,
+							player.whoAmI,
+							ai2: 1).rotation = -MathHelper.PiOver2 + MathHelper.ToRadians(offsetX * 0.55f);
+					}
+					npc.localAI[0] = 0;
+				}
+			}
+			void BloodSpikeWave()
+			{
+				const int Start = 2240;
+				const int End = 2450;
+				const int Duration = End - Start;
+
+				if (timer < Start) return;
+				if (timer > End) return;
+
+				if (timer == Start)
+				{
+					Point spawnPos = centre.ToTileCoordinates();
+					for (int j = 0; j < 16; j++)
+					{
+						if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+							break;
+						spawnPos.Y++;
+					}
+					spawnPos.Y++;
+					for (int j = 0; j < 16; j++)
+					{
+						if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+							break;
+						spawnPos.Y++;
+					}
+					Vector2 bottom = spawnPos.ToWorldCoordinates();
+					TelegraphWarning.CreateWarning(
+						npc.GetSource_FromAI(),
+						bottom,
+						bottom + (Vector2.UnitY * -5 * 16),
+						Duration,
+						TelegraphWarning.Orange,
+						5f);
+				}
+				if ((timer - Start) % 10 == 0)
+				{
+					IEntitySource npcSource = npc.GetSource_FromAI();
+					float invProgress = 1 - ((float)(timer - Start) / (float)Duration);
+					Vector2 diff = new Vector2((65*16/2) * invProgress, 0);
+					int height = 50 + (int)((1 - invProgress) * 100);
+					Vector2 bottom = centre + new Vector2(0, (18 * 16));
+
+					Projectile proj;
+
+					//Right
+					Point spawnPos = (bottom + diff).ToTileCoordinates();
+					for (int j = 0; j < 16; j++)
+					{
+						if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+							break;
+						spawnPos.Y++;
+					}
+
+					proj = Projectile.NewProjectileDirect(
+						npcSource,
+						spawnPos.ToWorldCoordinates() - new Vector2(0, height),
+						-Vector2.UnitY,
+						ModContent.ProjectileType<BloodThorn>(),
+						20,
+						0,
+						ai2: 1);
+					proj.rotation = -MathHelper.PiOver2;
+					proj.height = height;
+					proj.timeLeft = 180 + (int)((1-invProgress) * 60);
+					proj.netUpdate = true;
+
+					//Left
+					spawnPos = (bottom - diff).ToTileCoordinates();
+					for (int j = 0; j < 16; j++)
+					{
+						if (WorldGen.SolidTile2(spawnPos.X, spawnPos.Y))
+							break;
+						spawnPos.Y++;
+					}
+
+					proj = Projectile.NewProjectileDirect(
+						npcSource,
+						spawnPos.ToWorldCoordinates() - new Vector2(0, height),
+						-Vector2.UnitY,
+						ModContent.ProjectileType<BloodThorn>(),
+						20,
+						0,
+						ai2: 1);
+					proj.rotation = -MathHelper.PiOver2;
+					proj.height = height;
+					proj.timeLeft = 180 + (int)((1 - invProgress) * 60);
+					proj.netUpdate = true;
+				}
+			}
+			void Fall()
+			{
+				const int Start = 2673;
+				//const int End = 2668;
+				//const int Duration = End - Start;
+
+				if (timer < Start) return;
+				//if (timer > End) return;
+
+				if (timer == Start)
 				{
 					npc.noTileCollide = false;
+					npc.dontTakeDamage = false;
 				}
-				if (timer == End)
+				/*if (timer == End)
 				{
 					npc.rotation = 0;
 					npc.noTileCollide = true;
 					npc.Timer(105);
-				}
+				}*/
 
-				npc.velocity.X *= 0.995f;
-				npc.velocity.Y += 0.1f;
+				npc.velocity.X *= 0.99f;
+				npc.velocity.Y += 0.15f;
 				if (npc.collideX)
 				{
 					npc.position -= 2 * npc.velocity;
 					npc.velocity.X *= -1.3f;
 				}
 
-				npc.rotation += npc.velocity.X * 0.025f;
+				npc.rotation += npc.velocity.X * 0.015f;
 			}
 
 			Entrance();
@@ -379,9 +878,14 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 			Charge();
 			WarnCross();
 			Cross();
-			Tendrils();
-			WarnMoveRandom();
+			//WarnMoveRandom();
 			MoveRandom();
+			Tendrils();
+			//FewCreepers();
+			//ManyCreepers();
+			DoCreepers();
+			BloodSpikes();
+			BloodSpikeWave();
 			Fall();
 
 			npc.DoTimer();
@@ -404,27 +908,27 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 			26, 31, 37, 43
 		};
 
-		public override bool FindFrame(NPC npc)
+		public override bool FindFrame(NPC npc, int frameHeight)
 		{
 			npc.frameCounter++;
 			if (npc.dontTakeDamage)
 			{
 				if (npc.frameCounter > 8)
 				{
-					npc.frame.Y += npc.frame.Height;
-					if (npc.frame.Y > npc.frame.Height * 3)
+					npc.frame.Y += frameHeight;
+					if (npc.frame.Y > frameHeight * 3)
 						npc.frame.Y = 0;
-					npc.frameCounter = 0;
+					npc.frameCounter = 0.0;
 				}
 			}
 			else
 			{
 				if (npc.frameCounter > 5)
 				{
-					npc.frame.Y += npc.frame.Height;
-					if (npc.frame.Y > npc.frame.Height * 7)
-						npc.frame.Y = npc.frame.Height * 4;
-					npc.frameCounter = 0;
+					npc.frame.Y += frameHeight;
+					if (npc.frame.Y > frameHeight * 7)
+						npc.frame.Y = frameHeight * 4;
+					npc.frameCounter = 0.0;
 				}
 			}
 			return false;
@@ -467,6 +971,15 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 			Color.MediumVioletRed,
 		};
 
+		public static Projectile CreateWarning(Terraria.DataStructures.IEntitySource source, Vector2 start, Vector2 end, int lifetime = 200, int colourIndex = Violet, float widthMult = 2)
+		{
+			Projectile proj = Projectile.NewProjectileDirect(source, start, Vector2.Zero, ModContent.ProjectileType<TelegraphWarning>(), 0, 0, Main.myPlayer, end.X, end.Y, colourIndex);
+			proj.localAI[0] = widthMult;
+			proj.timeLeft = lifetime;
+			proj.netUpdate = true;
+			return proj;
+		}
+
 		public override string Texture => $"Terraria/Images/Projectile_{Terraria.ID.ProjectileID.None}";
 
 		public override void SetDefaults()
@@ -482,18 +995,20 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 
 		public override bool PreAI()
 		{
-			Projectile.position -= Projectile.velocity;
-			return base.PreAI();
+			Projectile.velocity = Vector2.Zero;
+			return false;
 		}
 
 		public override bool PreDraw(ref Color lightColor)
 		{
-			float width = Projectile.localAI[0] * Projectile.timeLeft;
+			int width = (int)(Projectile.localAI[0] * Projectile.timeLeft);
 			if (width == 0)
 				return false;
-			//Utils.DrawLine(Main.spriteBatch, Projectile.Center, Projectile.Center + Projectile.velocity, Colors[(int)Projectile.ai[2]], Color.Transparent, width);
-			//Utils.DrawLine(Main.spriteBatch, Projectile.Center, FloatToPosition(Projectile.ai[0]), Colors[(int)Projectile.ai[2]], Color.Transparent, width);
-			Utils.DrawLine(Main.spriteBatch, Projectile.Center, new Vector2(Projectile.ai[0], Projectile.ai[1]), Colors[(int)Projectile.ai[2]], Color.Transparent, width);
+			
+			//if(width < 8)
+				//Utils.DrawLine(Main.spriteBatch, Projectile.position, new Vector2(Projectile.ai[0], Projectile.ai[1]), Colors[(int)Projectile.ai[2]], Color.Transparent, width);
+			//else
+				Drawing.DrawLine(Main.spriteBatch, Projectile.Center, new Vector2(Projectile.ai[0], Projectile.ai[1]), Colors[(int)Projectile.ai[2]], Color.Transparent, width);
 			return false;
 		}
 	}
@@ -626,6 +1141,69 @@ namespace TerrariaCells.Common.GlobalNPCs.NPCTypes
 				//Utils.DrawLine(Main.spriteBatch, start + Main.screenPosition, anchor + Main.screenPosition, Color.Green);
 				//Utils.DrawLine(Main.spriteBatch, Projectile.position, Projectile.position + new Vector2(Projectile.width, 0), Color.Orange);
 			}
+			return false;
+		}
+	}
+
+	//Visual clone of blood thorn projectiles, such that it can actually be used as a hostile attack
+	internal class BloodThorn : ModProjectile
+	{
+		public override string Texture => $"Terraria/Images/Projectile_{ProjectileID.SharpTears}";
+		public override void SetStaticDefaults()
+		{
+			Main.projFrames[Projectile.type] = 6;
+		}
+		public override void SetDefaults()
+		{
+			Projectile.friendly = false;
+			Projectile.hostile = true;
+			Projectile.width = 32;
+			Projectile.height = 100;
+			Projectile.tileCollide = false;
+			Projectile.timeLeft = 160;
+		}
+		public override void OnSpawn(IEntitySource source)
+		{
+			Projectile.frame = Main.rand.Next(6);
+			//Projectile.rotation = -MathHelper.PiOver2 + Main.rand.NextFloat(-MathHelper.Pi/6f, MathHelper.Pi/6f);
+			Projectile.position.Y -= Projectile.height / 2f;
+
+			if (Projectile.ai[2] == 0)
+			{
+				TelegraphWarning.CreateWarning(
+					source,
+					new Vector2(Projectile.Center.X, Projectile.Bottom.Y),
+					new Vector2(Projectile.Center.X, Projectile.position.Y),
+					60,
+					TelegraphWarning.Orange,
+					1.6f);
+			}
+		}
+		public override void AI()
+		{
+			Projectile.velocity = Vector2.Zero;
+			if (Projectile.ai[0] < 60)
+				Projectile.ai[0]++;
+			else if(Projectile.ai[1] < 5)
+				Projectile.ai[1]++;
+		}
+		public override bool CanHitPlayer(Player target)
+		{
+			return Projectile.ai[0] >= 60;
+		}
+
+		public override bool PreDraw(ref Color lightColor)
+		{
+			ReLogic.Content.Asset<Texture2D> sharpTears = Terraria.GameContent.TextureAssets.Projectile[ProjectileID.SharpTears];
+			Vector2 texSize = sharpTears.Size();
+			Vector2 drawPos = Projectile.position - Main.screenPosition + new Vector2(0, Projectile.height);
+			Rectangle sourceRect = new Rectangle(0, (int)(Projectile.frame * texSize.Y / 6), (int)texSize.X, (int)(texSize.Y / 6));
+			if (Projectile.ai[1] < 5)
+			{
+				sourceRect.Width = (int)(Projectile.ai[1] * 0.2f * sourceRect.Width);
+			}
+			Color drawColour = Color.Lerp(lightColor, Color.DarkRed, 0.4f);
+			Main.spriteBatch.Draw(sharpTears.Value, drawPos, sourceRect, drawColour, Projectile.rotation, Vector2.Zero, new Vector2(Projectile.height*0.005f, Projectile.width*0.03125f), SpriteEffects.None, 0);
 			return false;
 		}
 	}
